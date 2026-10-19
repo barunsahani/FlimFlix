@@ -27,15 +27,39 @@ function toast(msg) {
 }
 /* Dataset image paths are from 2017 and many are dead -> ask the server for TMDB's current path. */
 let keyWarned = false;
-async function freshImages(id) {
-  try { return await api(`/api/poster/${id}`); }
-  catch (e) {
-    if (!keyWarned && /404|401/.test(String(e.message))) {
+const freshCache = new Map();      // id -> {poster, poster_large, backdrop} | null
+const freshWaiting = new Map();    // id -> [resolve, ...]
+let freshTimer = null;
+function freshImages(id) {
+  if (freshCache.has(id)) return Promise.resolve(freshCache.get(id));
+  return new Promise(resolve => {
+    if (freshWaiting.has(id)) freshWaiting.get(id).push(resolve); else freshWaiting.set(id, [resolve]);
+    if (!freshTimer) freshTimer = setTimeout(flushFresh, 80);   // collect many requests into one
+  });
+}
+async function postWithRetry(ids) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try { return await post('/api/posters', { ids }); }
+    catch (e) { await new Promise(r => setTimeout(r, 700 * (attempt + 1))); }
+  }
+  return null;
+}
+async function flushFresh() {
+  freshTimer = null;
+  const waiting = [...freshWaiting.entries()]; freshWaiting.clear();
+  for (let i = 0; i < waiting.length; i += 30) {
+    const chunk = waiting.slice(i, i + 30);
+    const res = await postWithRetry(chunk.map(([id]) => id));
+    if (res && res.error && !keyWarned) {
       keyWarned = true;
-      console.info('Some posters are outdated. Add a free TMDB_API_KEY to a .env file to refresh them.');
-      showKeyBanner();
+      showKeyBanner(res.error === 'bad_key' ? 'Your TMDB API key was rejected. Check the key in your .env file.'
+                                            : 'Add a free TMDB API key (see README) to load fresh posters and new movies.');
     }
-    return null;
+    for (const [id, resolvers] of chunk) {
+      const val = res && res.results ? (res.results[String(id)] || null) : null;
+      if (val) freshCache.set(id, val);          // only remember successes, failures can be retried later
+      resolvers.forEach(r => r(val));
+    }
   }
 }
 function showKeyBanner(msg) {
@@ -256,10 +280,17 @@ async function openMovie(id) {
   mb.classList.remove('hidden'); document.body.style.overflow = 'hidden';
   modal.replaceChildren(el('div', { class: 'loading', style: 'padding:120px 0' }, el('div', { class: 'spinner' }), 'Loading…'));
   mb.scrollTop = 0;
-  try {
-    const m = await api(`/api/movie/${id}?n=18`);
-    renderModal(m);
-  } catch { modal.replaceChildren(el('div', { class: 'loading', text: 'Movie not found.' })); }
+  let m;
+  try { m = await api(`/api/movie/${id}?n=18`); }
+  catch (e) {
+    modal.replaceChildren(el('button', { class: 'm-close', 'aria-label': 'Close', text: '✕', onclick: closeModal }),
+      el('div', { class: 'loading', style: 'padding:90px 20px' },
+        el('p', { text: String(e.message) === '404' ? 'No information is available for this movie.' : 'Could not load this movie right now (network or TMDB hiccup).' }),
+        el('p', { style: 'margin-top:18px' }, el('button', { class: 'btn btn-grey', text: '↻ Try again', onclick: () => openMovie(id) }))));
+    return;
+  }
+  try { renderModal(m); }
+  catch (e) { console.error(e); modal.replaceChildren(el('div', { class: 'loading', text: 'Something went wrong showing this movie.' })); }
 }
 
 function renderModal(m) {

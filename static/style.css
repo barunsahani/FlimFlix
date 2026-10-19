@@ -141,3 +141,6 @@ button{font:inherit;color:inherit;cursor:pointer;border:none;background:none}
 
 .ribbon{position:absolute;top:8px;left:0;background:var(--red);color:#fff;font-size:.68rem;font-weight:800;letter-spacing:.5px;padding:3px 8px 3px 7px;border-radius:0 3px 3px 0;z-index:2;text-transform:uppercase;box-shadow:0 2px 6px rgba(0,0,0,.5)}
 .ribbon.new{background:#0a84ff}
+
+.sim-card .add{position:absolute;top:8px;right:8px;width:30px;height:30px;border-radius:50%;background:rgba(20,20,20,.85);border:2px solid rgba(255,255,255,.6);color:#fff;font-size:1.1rem;line-height:1;display:flex;align-items:center;justify-content:center;z-index:2}
+.sim-card .add.on{background:#fff;color:#000;border-color:#fff}

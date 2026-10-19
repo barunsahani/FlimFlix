@@ -106,27 +106,52 @@ _TTL = 6 * 3600
 _tmdb_cache: dict = {}
 
 
+_http = None
+_http_lock = threading.Lock()
+
+
+def _client():
+    """One shared keep-alive HTTP client (opening a new TLS connection per call was timing out)."""
+    global _http
+    with _http_lock:
+        if _http is None:
+            import httpx
+            _http = httpx.Client(timeout=httpx.Timeout(15.0, connect=8.0),
+                                 limits=httpx.Limits(max_connections=8, max_keepalive_connections=8))
+        return _http
+
+
 def tmdb(path: str, **params):
-    """Cached TMDB v3 GET. Raises HTTPException on problems."""
+    """Cached TMDB v3 GET with retries. Raises HTTPException on problems."""
     if not TMDB_API_KEY:
         raise HTTPException(404, "no_key")
     key = (path, tuple(sorted(params.items())))
     hit = _tmdb_cache.get(key)
     if hit and time.time() - hit[0] < _TTL:
         return hit[1]
-    import httpx
-    try:
-        r = httpx.get(f"https://api.themoviedb.org/3{path}",
-                      params={**params, "api_key": TMDB_API_KEY, "language": "en-US"}, timeout=12)
-    except Exception as e:
-        raise HTTPException(502, f"TMDB unreachable: {type(e).__name__}")
-    if r.status_code == 401:
-        raise HTTPException(401, "bad_key")
-    if r.status_code != 200:
-        raise HTTPException(404 if r.status_code == 404 else 502, f"TMDB {r.status_code}")
-    data = r.json()
-    _tmdb_cache[key] = (time.time(), data)
-    return data
+    last = "TMDB unreachable"
+    for attempt in range(3):
+        try:
+            r = _client().get(f"https://api.themoviedb.org/3{path}",
+                              params={**params, "api_key": TMDB_API_KEY, "language": "en-US"})
+        except Exception as e:
+            last = f"TMDB unreachable ({type(e).__name__})"
+            time.sleep(0.5 * (attempt + 1))
+            continue
+        if r.status_code == 401:
+            raise HTTPException(401, "bad_key")
+        if r.status_code == 404:
+            raise HTTPException(404, "not_found")
+        if r.status_code == 429 or r.status_code >= 500:
+            last = f"TMDB busy ({r.status_code})"
+            time.sleep(0.8 * (attempt + 1))
+            continue
+        if r.status_code != 200:
+            raise HTTPException(502, f"TMDB {r.status_code}")
+        data = r.json()
+        _tmdb_cache[key] = (time.time(), data)
+        return data
+    raise HTTPException(502, last)
 
 
 def _genre_map() -> dict:
@@ -136,7 +161,12 @@ def _genre_map() -> dict:
         return {}
 
 
+_live_seen: dict = {}
+
+
 def live_card(j: dict) -> dict:
+    if j.get("id") is not None:
+        _live_seen[int(j["id"])] = j
     gm = _genre_map()
     rd = j.get("release_date") or ""
     if j.get("genres"):
@@ -283,9 +313,18 @@ def movie(movie_id: int, n: int = Query(18, ge=1, le=40)):
         d["similar"] = model.similar(movie_id, n)
         return d
     # not in the 2017 training catalog -> new release: details from TMDB, picks from the model
-    j = tmdb(f"/movie/{movie_id}")          # raises 404 / no_key for us
+    try:
+        j = tmdb(f"/movie/{movie_id}")
+    except HTTPException as e:
+        raw = _live_seen.get(int(movie_id))      # fall back to what the list already told us
+        if raw is None or e.detail in ("no_key", "bad_key"):
+            raise
+        j = raw
     d = live_detail(j)
-    d["similar"] = model.similar_to_new(d["overview"], d["tagline"], d["genres"], n)
+    try:
+        d["similar"] = model.similar_to_new(d["overview"], d["tagline"], d["genres"], n)
+    except Exception:
+        d["similar"] = []
     try:
         rec = tmdb(f"/movie/{movie_id}/recommendations").get("results", [])
         if not rec:
@@ -321,37 +360,80 @@ def cards(p: Profile):
     return {"movies": out}
 
 
-@app.get("/api/poster/{movie_id}")
-def fresh_poster(movie_id: int):
-    """Dataset image paths date from 2017 and many are dead. Ask TMDB for the current ones."""
+def poster_info(movie_id: int):
+    """Current poster/backdrop paths for a movie (dataset paths date from 2017 and many are dead)."""
     key = str(movie_id)
     if key in POSTER_CACHE:
         return POSTER_CACHE[key]
-    if not TMDB_API_KEY:
-        raise HTTPException(404, "no_key")
-    import httpx
-    try:
-        r = httpx.get(f"https://api.themoviedb.org/3/movie/{movie_id}",
-                      params={"api_key": TMDB_API_KEY}, timeout=10)
-    except Exception as e:
-        raise HTTPException(502, f"TMDB unreachable: {type(e).__name__}")
-    if r.status_code == 401:
-        raise HTTPException(401, "bad_key")
-    if r.status_code != 200:
-        raise HTTPException(404, "not_found")
-    j = r.json()
+    j = tmdb(f"/movie/{movie_id}")
+    if not j.get("poster_path"):
+        raise HTTPException(404, "no_poster")
     out = {
-        "poster": f"https://image.tmdb.org/t/p/w342{j['poster_path']}" if j.get("poster_path") else None,
-        "poster_large": f"https://image.tmdb.org/t/p/w500{j['poster_path']}" if j.get("poster_path") else None,
-        "backdrop": f"https://image.tmdb.org/t/p/w1280{j['backdrop_path']}" if j.get("backdrop_path") else None,
+        "poster": f"{IMG}/w342{j['poster_path']}",
+        "poster_large": f"{IMG}/w500{j['poster_path']}",
+        "backdrop": f"{IMG}/w1280{j['backdrop_path']}" if j.get("backdrop_path") else None,
     }
     POSTER_CACHE[key] = out
-    if len(POSTER_CACHE) % 10 == 0:
+    if len(POSTER_CACHE) % 5 == 0:
         try:
             json.dump(POSTER_CACHE, open(POSTER_CACHE_FILE, "w"))
         except Exception:
             pass
     return out
+
+
+@app.get("/api/poster/{movie_id}")
+def fresh_poster(movie_id: int):
+    return poster_info(movie_id)
+
+
+class IdList(BaseModel):
+    ids: List[int]
+
+
+@app.post("/api/posters")
+def fresh_posters(p: IdList):
+    """Batch version: the browser asks for many dead posters at once."""
+    if not TMDB_API_KEY:
+        return {"results": {}, "error": "no_key"}
+    from concurrent.futures import ThreadPoolExecutor
+    ids = list(dict.fromkeys(p.ids))[:40]
+
+    def one(i):
+        try:
+            return i, poster_info(i)
+        except HTTPException as e:
+            return i, ({"_error": e.detail} if e.detail == "bad_key" else None)
+
+    with ThreadPoolExecutor(max_workers=6) as ex:
+        res = dict(ex.map(one, ids))
+    if any(isinstance(v, dict) and v.get("_error") == "bad_key" for v in res.values()):
+        return {"results": {}, "error": "bad_key"}
+    return {"results": {str(k): v for k, v in res.items()}, "error": None}
+
+
+# use already-known fresh poster paths in every card the API returns (fewer dead images)
+_orig_card, _orig_detail = model.card, model.detail
+
+
+def _card_fixed(i, similarity=None):
+    c = _orig_card(i, similarity)
+    f = POSTER_CACHE.get(str(c["id"]))
+    if f and f.get("poster"):
+        c["poster"] = f["poster"]
+    return c
+
+
+def _detail_fixed(movie_id):
+    d = _orig_detail(movie_id)
+    f = POSTER_CACHE.get(str(movie_id)) if d else None
+    if f:
+        d["poster"], d["poster_large"] = f["poster"], f["poster_large"]
+        d["backdrop"] = f["backdrop"] or d.get("backdrop")
+    return d
+
+
+model.card, model.detail = _card_fixed, _detail_fixed
 
 
 # ---------------------------------------------------------------------- frontend
