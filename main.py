@@ -195,14 +195,65 @@ def live_detail(j: dict) -> dict:
     return c
 
 
+# def _live_list(path: str, limit: int = 20, upcoming_only: bool = False):
+#     data = tmdb(path)
+#     items = [x for x in data.get("results", []) if x.get("poster_path") and x.get("title")]
+#     if upcoming_only:
+#         today = dt.date.today().isoformat()
+#         items = sorted([x for x in items if (x.get("release_date") or "") >= today],
+#                        key=lambda x: x.get("release_date") or "9999")
+#     return [live_card(x) for x in items[:limit]]
+
+
+
 def _live_list(path: str, limit: int = 20, upcoming_only: bool = False):
-    data = tmdb(path)
-    items = [x for x in data.get("results", []) if x.get("poster_path") and x.get("title")]
+    from datetime import date
+
+    items = []
+    seen = set()
+
+    # Fetch multiple TMDB pages for upcoming movies
+    pages = 10 if upcoming_only else 1
+
+    for page in range(1, pages + 1):
+        data = tmdb(path, page=page)
+
+        for x in data.get("results", []):
+            movie_id = x.get("id")
+            title = x.get("title")
+            poster_path = x.get("poster_path")
+            release_date = x.get("release_date") or ""
+
+            if not movie_id or movie_id in seen:
+                continue
+
+            if not title or not poster_path:
+                continue
+
+            if upcoming_only:
+                if not release_date:
+                    continue
+
+                try:
+                    if date.fromisoformat(release_date) < date.today():
+                        continue
+                except ValueError:
+                    continue
+
+            seen.add(movie_id)
+
+            try:
+                movie = live_detail(x)
+                if movie:
+                    items.append(movie)
+            except Exception:
+                continue
+
     if upcoming_only:
-        today = dt.date.today().isoformat()
-        items = sorted([x for x in items if (x.get("release_date") or "") >= today],
-                       key=lambda x: x.get("release_date") or "9999")
-    return [live_card(x) for x in items[:limit]]
+        items.sort(key=lambda x: x.get("release_date") or "9999-12-31")
+
+    return items[:limit]
+
 
 
 @app.get("/api/live")
@@ -214,7 +265,8 @@ def live():
                             ("Coming Soon", "/movie/upcoming", True),
                             ("Trending This Week", "/trending/movie/week", False)]:
         try:
-            cards = _live_list(path, upcoming_only=up)
+            # cards = _live_list(path, upcoming_only=up)
+            cards = _live_list(path, limit=60 if up else 20, upcoming_only=up)
         except HTTPException as e:
             if e.detail == "bad_key":
                 return {"enabled": False, "rows": [], "hero": None, "error": "bad_key"}
