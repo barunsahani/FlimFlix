@@ -1,5 +1,5 @@
 """
-CineMatch - Netflix-style movie web app.
+FlimFLix - Netflix-style movie web app.
 
     uvicorn main:app --reload
     open http://127.0.0.1:8000
@@ -46,7 +46,7 @@ try:
 except Exception:
     POSTER_CACHE = {}
 
-app = FastAPI(title="CineMatch", version="4.0")
+app = FastAPI(title="FlimFlix", version="4.0")
 
 model: Recommender = Recommender.load(os.path.join(BASE, "model"))
 meta = model.meta
@@ -70,7 +70,7 @@ def _pool(mask, score, size=60):
 
 POOLS = {
     "Trending Now": _pool(_known & (meta["year"].fillna(0).values >= 2012), _pop_rank),
-    "Popular on CineMatch": _pool(_known, meta["popularity"].values),
+    "Popular on FlimFlix": _pool(_known, meta["popularity"].values),
     "Top Rated": _pool(meta["vote_count"].values >= 1500, meta["wr"].values),
     "Critically Acclaimed Classics": _pool(
         _known & (meta["year"].fillna(9999).values < 1990), meta["wr"].values),
@@ -246,7 +246,7 @@ def home():
     hero_idx = random.choice(HERO_POOL)
     hero = model.detail(int(meta.iloc[hero_idx]["id"]))
     rows = []
-    for name in ["Trending Now", "Popular on CineMatch", "Top Rated"]:
+    for name in ["Trending Now", "Popular on FlimFlix", "Top Rated"]:
         rows.append({"title": name, "movies": _cards(_sample(POOLS[name]))})
     for g in random.sample(GENRE_ROWS[:8], 4):
         rows.append({"title": f"{GENRE_LABEL.get(g, g)} Movies", "genre": g,

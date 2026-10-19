@@ -1,4 +1,4 @@
-/* CineMatch front-end (vanilla JS, no build step) */
+/* front-end (vanilla JS, no build step) */
 const $ = (s, r = document) => r.querySelector(s);
 const app = $('#app');
 
@@ -53,7 +53,7 @@ async function flushFresh() {
     if (res && res.error && !keyWarned) {
       keyWarned = true;
       showKeyBanner(res.error === 'bad_key' ? 'Your TMDB API key was rejected. Check the key in your .env file.'
-                                            : 'Add a free TMDB API key (see README) to load fresh posters and new movies.');
+        : 'Add a free TMDB API key (see README) to load fresh posters and new movies.');
     }
     for (const [id, resolvers] of chunk) {
       const val = res && res.results ? (res.results[String(id)] || null) : null;
@@ -66,7 +66,7 @@ function showKeyBanner(msg) {
   if (document.getElementById('keyBanner') || sessionStorage.getItem('keyBannerOff')) return;
   document.body.append(el('div', { id: 'keyBanner', class: 'banner' },
     el('span', { text: msg || 'Some posters are outdated. Add a free TMDB API key (see README) to load the latest ones.' }),
-    el('button', { text: '✕', onclick: e => { try { sessionStorage.setItem('keyBannerOff', '1'); } catch {} e.target.parentNode.remove(); } })));
+    el('button', { text: '✕', onclick: e => { try { sessionStorage.setItem('keyBannerOff', '1'); } catch { } e.target.parentNode.remove(); } })));
 }
 function testImage(url) {
   return new Promise(res => { const i = new Image(); i.onload = () => res(true); i.onerror = () => res(false); i.src = url; });
@@ -108,12 +108,12 @@ const isUpcoming = m => !!m.release_date && new Date(m.release_date + 'T00:00:00
 const fmtDate = d => new Date(d + 'T00:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 
 /* ---------------------------------------------------------------- My List */
-const LIST_KEY = 'cinematch_list_v1';
+const LIST_KEY = 'flimflix_list_v1';
 let myList = [];
 try { myList = JSON.parse(localStorage.getItem(LIST_KEY) || '[]'); } catch { myList = []; }
 const inList = id => myList.includes(id);
 function saveList() {
-  try { localStorage.setItem(LIST_KEY, JSON.stringify(myList)); } catch {}
+  try { localStorage.setItem(LIST_KEY, JSON.stringify(myList)); } catch { }
   const c = $('#listCount'); c.textContent = myList.length; c.classList.toggle('hidden', !myList.length);
 }
 function toggleList(movie) {
@@ -133,8 +133,10 @@ function syncAddBtn(b, id) {
 
 /* ------------------------------------------------------------------ cards */
 function movieCard(m, showMatch = false) {
-  const add = el('button', { class: 'add', 'data-add': m.id, title: 'My List', 'aria-label': 'Toggle My List',
-    onclick: e => { e.stopPropagation(); toggleList(m); } });
+  const add = el('button', {
+    class: 'add', 'data-add': m.id, title: 'My List', 'aria-label': 'Toggle My List',
+    onclick: e => { e.stopPropagation(); toggleList(m); }
+  });
   syncAddBtn(add, m.id);
   const meta = el('div', { class: 'm' },
     showMatch && m.match ? el('span', { class: 'match', text: `${m.match}% Match` }) : null,
@@ -142,8 +144,10 @@ function movieCard(m, showMatch = false) {
     isUpcoming(m) ? el('span', { text: `Releases ${fmtDate(m.release_date)}` }) : (m.year ? el('span', { text: m.year }) : null));
   const ov = el('div', { class: 'ov' }, el('div', { class: 't', text: m.title }), meta,
     el('div', { class: 'm', style: 'margin-top:3px;color:#aaa' }, (m.genres || []).slice(0, 2).join(' • ')));
-  const c = el('div', { class: 'card', tabindex: '0', onclick: () => openMovie(m.id),
-    onkeydown: e => { if (e.key === 'Enter') openMovie(m.id); } }, img(m.poster, m.title, m.id), ov, add,
+  const c = el('div', {
+    class: 'card', tabindex: '0', onclick: () => openMovie(m.id),
+    onkeydown: e => { if (e.key === 'Enter') openMovie(m.id); }
+  }, img(m.poster, m.title, m.id), ov, add,
     isUpcoming(m) ? el('div', { class: 'ribbon', text: `Coming ${new Date(m.release_date + 'T00:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}` })
       : (m.live && m.year >= new Date().getFullYear() - 0 ? el('div', { class: 'ribbon new', text: 'NEW' }) : null));
   return c;
@@ -231,7 +235,7 @@ async function showHome() {
 function gridView(title, sub, movies, showMatch = false) {
   app.replaceChildren(el('div', { class: 'view' }, el('h1', { text: title }), el('div', { class: 'sub', text: sub }),
     movies.length ? el('div', { class: 'grid' }, movies.map(m => movieCard(m, showMatch)))
-                  : el('div', { class: 'empty', text: 'Nothing here yet.' })));
+      : el('div', { class: 'empty', text: 'Nothing here yet.' })));
 }
 
 async function showGenre(name) {
@@ -244,7 +248,7 @@ async function showMyList() {
   setActive('mylist'); window.scrollTo(0, 0);
   if (!myList.length) {
     app.replaceChildren(el('div', { class: 'view' }, el('h1', { text: 'My List' }),
-      el('div', { class: 'empty', text: 'Add movies with the + button and CineMatch will build recommendations from your taste.' })));
+      el('div', { class: 'empty', text: 'Add movies with the + button and FlimFlix Match will build recommendations from your taste.' })));
     return;
   }
   const [mine, picks] = await Promise.all([post('/api/cards', { ids: myList }), post('/api/profile', { ids: myList, n: 24 })]);
@@ -264,7 +268,7 @@ async function showSearch(q) {
   const d = await api(`/api/search?q=${encodeURIComponent(q)}`);
   if (seq !== searchSeq) return;
   gridView(d.movies.length ? `Results for “${q}”` : `No results for “${q}”`,
-           d.movies.length ? 'Click a title, then scroll to “More Like This”' : 'Try another title', d.movies);
+    d.movies.length ? 'Click a title, then scroll to “More Like This”' : 'Try another title', d.movies);
 }
 
 /* ------------------------------------------------------------------- modal */
@@ -328,9 +332,11 @@ function renderModal(m) {
   };
   const sim = el('div', { class: 'm-sim' },
     el('h3', { text: 'More Like This' }),
-    el('div', { class: 'why', text: m.live
-      ? `New release — matched by the CineMatch model against the 30,000-movie catalog by plot, themes and genres.`
-      : `Recommended by the CineMatch model — similar plot, themes, genres, studio and franchise to “${m.title}”.` }),
+    el('div', {
+      class: 'why', text: m.live
+        ? `New release — matched by the FlimFlix Match model against the 30,000-movie catalog by plot, themes and genres.`
+        : `Recommended by the FlimFlix model — similar plot, themes, genres, studio and franchise to “${m.title}”.`
+    }),
     el('div', { class: 'sim-grid' }, (m.similar || []).map(s => simCard(s, true))));
   if (m.tmdb_similar && m.tmdb_similar.length) {
     sim.append(el('h3', { style: 'margin-top:30px', text: 'Recent Titles Viewers Also Like' }),
