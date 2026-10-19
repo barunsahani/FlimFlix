@@ -327,7 +327,10 @@ function renderModal(m) {
     return el('div', { class: 'sim-card', onclick: () => openMovie(s.id) }, pw,
       el('div', { class: 'info' }, el('div', { class: 't', text: s.title }),
         el('div', { class: 'm' },
-          withMatch ? el('span', { class: 'match', text: `${s.match}% Match` }) : el('span', { text: s.rating ? `★ ${s.rating.toFixed(1)}` : '' }),
+          // withMatch ? el('span', { class: 'match', text: `${s.match}% Match` }) : el('span', { text: s.rating ? `★ ${s.rating.toFixed(1)}` : '' }),
+          withMatch && s.match != null
+          ? el('span', { class: 'match', text: `${s.match}% Match` })
+          : el('span', { text: s.rating ? `★ ${s.rating.toFixed(1)}` : '' }),
           el('span', { text: s.year || '' }))));
   };
   const sim = el('div', { class: 'm-sim' },

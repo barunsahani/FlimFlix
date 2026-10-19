@@ -358,12 +358,135 @@ def search(q: str = Query(..., min_length=1), limit: int = Query(30, ge=1, le=60
     return {"query": q, "movies": local}
 
 
+
+def _collection_movies(movie_id: int, movie_data: dict, limit: int = 18):
+    """Return other movies from the selected movie's TMDB collection."""
+    collection = movie_data.get("belongs_to_collection") or {}
+    collection_id = collection.get("id")
+
+    if not collection_id:
+        return []
+
+    try:
+        parts = tmdb(f"/collection/{collection_id}").get("parts", [])
+    except HTTPException:
+        return []
+
+    movies = []
+    seen = {int(movie_id)}
+
+    for item in sorted(
+        parts,
+        key=lambda x: x.get("release_date") or ""
+    ):
+        mid = item.get("id")
+
+        if not mid or int(mid) in seen:
+            continue
+        if not item.get("poster_path") or not item.get("title"):
+            continue
+
+        seen.add(int(mid))
+        card = live_card(item)
+        card["collection"] = collection.get("name")
+        movies.append(card)
+
+    return movies[:limit]
+
+
+
+# @app.get("/api/movie/{movie_id}")
+# def movie(movie_id: int, n: int = Query(18, ge=1, le=40)):
+#     # d = model.detail(movie_id)
+#     # if d is not None:
+#     #     d["similar"] = model.similar(movie_id, n)
+#     #     return d
+    
+#     d = model.detail(movie_id)
+#     if d is not None:
+#         d["similar"] = model.similar(movie_id, n)
+
+#         # Fetch franchise/collection info from TMDB
+#         if TMDB_API_KEY:
+#             try:
+#                 tmdb_movie = tmdb(f"/movie/{movie_id}")
+#                 collection = tmdb_movie.get("belongs_to_collection") or {}
+#                 d["collection"] = collection.get("name")
+#             except HTTPException:
+#                 d.setdefault("collection", None)
+
+#         return d
+
+
+
 @app.get("/api/movie/{movie_id}")
 def movie(movie_id: int, n: int = Query(18, ge=1, le=40)):
     d = model.detail(movie_id)
+    j = None
+
+    # Fetch TMDB details for both local and newer movies
+    if TMDB_API_KEY:
+        try:
+            j = tmdb(f"/movie/{movie_id}")
+        except HTTPException as e:
+            raw = _live_seen.get(int(movie_id))
+            if d is None:
+                if raw is None or e.detail in ("no_key", "bad_key"):
+                    raise
+                j = raw
+
+    # Build the base movie details and model recommendations
     if d is not None:
         d["similar"] = model.similar(movie_id, n)
-        return d
+    else:
+        if j is None:
+            j = tmdb(f"/movie/{movie_id}")
+
+        d = live_detail(j)
+        try:
+            d["similar"] = model.similar_to_new(
+                d["overview"], d["tagline"], d["genres"], n,
+                exclude_ids=[movie_id]
+            )
+        except Exception:
+            d["similar"] = []
+
+    # Refresh collection metadata and prioritize franchise movies
+    if j:
+        fresh = live_detail(j)
+        for key in (
+            "overview", "tagline", "runtime", "votes", "collection",
+            "original_language", "poster_large", "backdrop", "release_date"
+        ):
+            if fresh.get(key) is not None:
+                d[key] = fresh[key]
+
+        franchise = _collection_movies(movie_id, j, n)
+        franchise_ids = {x["id"] for x in franchise}
+
+        # Franchise titles first; other recommendations fill remaining slots
+        combined = franchise + [
+            x for x in d.get("similar", [])
+            if x["id"] not in franchise_ids and x["id"] != movie_id
+        ]
+        d["similar"] = combined[:n]
+
+    # Keep TMDB's separate recommendation row
+    try:
+        rec = tmdb(f"/movie/{movie_id}/recommendations").get("results", [])
+        if not rec:
+            rec = tmdb(f"/movie/{movie_id}/similar").get("results", [])
+
+        d["tmdb_similar"] = [
+            live_card(x) for x in rec
+            if x.get("poster_path") and x.get("title")
+        ][:12]
+    except HTTPException:
+        d["tmdb_similar"] = []
+
+    return d
+
+
     # not in the 2017 training catalog -> new release: details from TMDB, picks from the model
     try:
         j = tmdb(f"/movie/{movie_id}")
