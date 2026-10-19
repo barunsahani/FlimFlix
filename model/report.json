@@ -1,0 +1,35 @@
+{
+  "catalog_size": 30266,
+  "franchises": 1184,
+  "heldout_queries": 1769,
+  "baseline_original_recipe": {
+    "hit10": 0.6387789711701526,
+    "recall10": 0.492495535994688,
+    "genre_jaccard10": 0.39227181978877856
+  },
+  "tuned_content_only": {
+    "hit10": 0.6252119841718485,
+    "recall10": 0.45813750033648276,
+    "genre_jaccard10": 0.8546881701616015,
+    "obscure_lt25_votes": 0.02634256642170718,
+    "median_votes": 246.0
+  },
+  "final_model": {
+    "hit10": 0.9960429621254946,
+    "recall10": 0.9867674769172791,
+    "genre_jaccard10": 0.8013205828779599,
+    "obscure_lt25_votes": 0.11254946297343131,
+    "median_votes": 172.0
+  },
+  "weights": {
+    "text": 1.0,
+    "genres": 0.4,
+    "companies": 0.12,
+    "language": 0.08,
+    "era": 0.0,
+    "title": 0.12,
+    "franchise": 0.6
+  },
+  "prior_lambda": 0.1,
+  "note": "Baseline re-implemented on the same cleaned catalog (without NLTK lemmatisation). prior_lambda raised from the benchmark-optimal 0.0 to 0.1 after qualitative review: it favours well-known relevant titles over obscure franchise entries."
+}

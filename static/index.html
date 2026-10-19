@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FLIMFLIX – Movies picked for you</title>
+<link rel="preconnect" href="https://image.tmdb.org">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header id="nav" class="nav">
+  <div class="nav-left">
+    <a class="logo" href="#" data-nav="home">FLIMFLIX</a>
+    <nav class="links">
+      <a href="#" data-nav="home" class="active">Home</a>
+      <div class="dropdown">
+        <a href="#" class="dd-btn">Genres ▾</a>
+        <div class="dd-menu" id="genreMenu"></div>
+      </div>
+      <a href="#" data-nav="mylist">My List <span id="listCount" class="pill hidden">0</span></a>
+    </nav>
+  </div>
+  <div class="nav-right">
+    <div class="search" id="search">
+      <button class="icon-btn" id="searchBtn" aria-label="Search">
+        <svg viewBox="0 0 24 24" width="22" height="22"><circle cx="10" cy="10" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M15 15l6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+      <input id="searchInput" type="text" placeholder="Titles, e.g. Inception" autocomplete="off">
+    </div>
+  </div>
+</header>
+
+<main id="app"></main>
+
+<div id="modalBackdrop" class="modal-backdrop hidden">
+  <div class="modal" id="modal" role="dialog" aria-modal="true"></div>
+</div>
+<div id="toast" class="toast hidden"></div>
+
+<footer class="footer">FLIMFLIX · content-based recommendations from a TF-IDF + metadata model · Posters &amp; data courtesy of TMDB</footer>
+<script src="/static/app.js"></script>
+</body>
+</html>
