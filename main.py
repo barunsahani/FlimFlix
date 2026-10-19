@@ -274,11 +274,50 @@ def live():
         if cards:
             rows.append({"title": title, "movies": cards})
     try:
+        # for x in tmdb("/trending/movie/week").get("results", []):
+        #     if x.get("backdrop_path") and x.get("overview") and x.get("poster_path"):
+        #         hero = live_detail(x)
+        #         hero["collection"] = "Trending this week"
+        #         break
+        
         for x in tmdb("/trending/movie/week").get("results", []):
             if x.get("backdrop_path") and x.get("overview") and x.get("poster_path"):
                 hero = live_detail(x)
                 hero["collection"] = "Trending this week"
+                hero["trailer_key"] = None
+
+                try:
+                    videos = tmdb(f"/movie/{x['id']}/videos").get("results", [])
+                    trailer = next(
+                        (
+                            v for v in videos
+                            if v.get("site") == "YouTube"
+                            and v.get("type") == "Trailer"
+                            and v.get("key")
+                            and v.get("official", False)
+                        ),
+                        None
+                    )
+
+                    # Fall back to any YouTube trailer if no official one exists
+                    if not trailer:
+                        trailer = next(
+                            (
+                                v for v in videos
+                                if v.get("site") == "YouTube"
+                                and v.get("type") == "Trailer"
+                                and v.get("key")
+                            ),
+                            None
+                        )
+
+                    if trailer:
+                        hero["trailer_key"] = trailer["key"]
+                except HTTPException:
+                    pass
+
                 break
+
     except HTTPException:
         pass
     return {"enabled": bool(rows), "rows": rows, "hero": hero}

@@ -192,6 +192,33 @@ button {
   overflow: hidden
 }
 
+
+.hero-video {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.hero-video iframe {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 100%;
+  height: 100%;
+  min-width: 177.78vh;
+  min-height: 56.25vw;
+  transform: translate(-50%, -50%);
+  border: 0;
+}
+
+/* Keep the hero title and buttons above the video */
+.hero-info {
+  z-index: 2;
+}
+
+
 .hero::before {
   content: "";
   position: absolute;
@@ -942,4 +969,50 @@ button {
   background: #fff;
   color: #000;
   border-color: #fff
+}
+
+
+
+/* Homepage hero trailer background */
+.hero {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.hero-video {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.hero-video iframe {
+  position: absolute !important;
+  top: 50% !important;
+  left: 50% !important;
+  width: max(100%, 177.78vh) !important;
+  height: max(100%, 56.25vw) !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  transform: translate(-50%, -50%) !important;
+  border: 0 !important;
+  pointer-events: none;
+}
+
+.hero::before,
+.hero::after {
+  z-index: 1;
+}
+
+.hero-info {
+  position: relative;
+  z-index: 3;
+}
+
+.hero-poster {
+  z-index: 2;
 }

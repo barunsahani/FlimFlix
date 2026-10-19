@@ -173,6 +173,28 @@ const yt = m => `https://www.youtube.com/results?search_query=${encodeURICompone
 
 function heroEl(h) {
   const hero = el('section', { class: 'hero' });
+  
+const videoLayer = el('div', { class: 'hero-video' });
+hero.append(videoLayer);
+
+// Keep the existing backdrop as the fallback.
+// If YouTube reports an error, remove only the video.
+if (h.trailer_key) {
+  const frame = el('iframe', {
+    title: `${h.title} trailer`,
+    src: `https://www.youtube.com/embed/${encodeURIComponent(h.trailer_key)}?autoplay=1&mute=1&controls=0&loop=1&playlist=${encodeURIComponent(h.trailer_key)}&playsinline=1&enablejsapi=1`,
+    allow: 'autoplay; encrypted-media; picture-in-picture',
+    referrerpolicy: 'strict-origin-when-cross-origin'
+  });
+
+  videoLayer.append(frame);
+
+  // A browser iframe error can trigger this fallback.
+  frame.addEventListener('error', () => {
+    videoLayer.replaceChildren();
+  });
+}
+
   paintHeader(hero, h, 'hero-poster', 'hero-blur');
   const addBtn = el('button', { class: 'btn btn-grey', 'data-add': h.id, onclick: () => toggleList(h) });
   syncAddBtn(addBtn, h.id);
@@ -191,6 +213,8 @@ function heroEl(h) {
       addBtn)));
   return hero;
 }
+
+
 
 let personalHost = null;
 async function refreshPersonalRows() {
